@@ -1,0 +1,676 @@
+---
+title: "Heart Disease Prediction and Logistic Regression"
+author: "Rob van Mechelen"
+date: "9/10/2022"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+As first step, include libraries to run the code:
+
+```{r libraries}
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(table1)
+```
+
+As a next step load the data set:
+```{r}
+HD <- read.csv("Heart_Disease_Prediction.csv")
+colnames(HD)  # 15 colnames
+```
+
+* Colnames for risk factors:
+The colnames *Age*, *Sex*, *BP*, *Cholesterol*, and *FBS.over.120* (diabetes mellitus), all refer to well known risk factors for heart disease, in particular coronary artery disease (CAD). The Framingham study published more than 20 years ago, marked these variables as most important to predict the presence of CAD.
+
+see: <https://www.framinghamheartstudy.org/> 
+
+* Colnames for CAD:
+The colnames *Chest.pain.type* and *EKG.results* refer to clinical characteristics and EKG abnormalities in patients suspected of CAD at rest.
+
+* Colnames for the results of exercise tests: 
+The colnames *Max.HR*, *Exercise.angina*, *ST.depression* and *slope.of.ST* and *Thallium* refer to the results of patients, who underwent an exercise test.
+
+* Colname for severity of CAD:
+The colname *number.of.vessels.fluro* refers to the result of an invasive coronary angiography test done by fluroscopy.
+
+* Colname for the outcome of the study:
+The colname *Heart.Disease* is the standard outcome of this study. Either heart disease was present or not in this study population. All other variables were tested against the *presence* or *absence* of this variable.  
+
+## Type of study
+This is a cross-sectional study, where 13 variables are tested against an outcome variable *Heart.Disease*. In a total of 270 patients, there were 150 patients without heart disease and 120 patients with heart disease.
+
+
+```{r table}
+table(HD$Heart.Disease)
+addmargins(table(HD$Heart.Disease))
+```
+
+## Analysis of risk factors
+As mentioned, the colnames *Age*, *Sex*, *BP*, *Cholesterol*, and *FBS.over.120* (Diabetes Mellitus), all refer to well known risk factors for heart disease. The table gives an overview of the risk factors in the absence or presence of heart disease observed in the study. 
+
+```{r risk factors}
+# change the Sex variable to a factor variable
+HD$Sex <- factor(HD$Sex, 
+                 levels=c(0,1),
+                 labels=c("female",
+                          "male"))
+
+# add a status variable to show the outcome 
+status <- ifelse(HD$Heart.Disease == "Absence", 0,1)
+HD$status <- status
+HD$status <- factor(HD$status, 
+                    levels=c(0,1),
+                    labels=c("no Heart Disease",
+                             "Heart Disease"))
+
+# change the FBS.over.120 variable to a factor variable
+HD$FBS.over.120<- factor(HD$FBS.over.120,
+                     levels=c(0,1),
+                     labels=c("no", "yes"))
+```
+
+Main risk factors and outcome
+
+```{r}
+
+table1(~ Age + Sex + BP + Cholesterol + 
+         FBS.over.120 | status, overall = "Total", data=HD)
+
+```
+
+This table gives an overview of the risk factors in the absence or presence of heart disease observed in the study. 
+
+
+What we miss are the p values. To create a function to compute the p-value for continuous or categorical variables.I took the *pvalue* function from the Cran website, see <https://cran.r-project.org/web/packages/table1/vignettes/table1-examples.html> 
+
+#### p value function code:
+```{r}
+pvalue <- function(x, ...) {
+  # Construct vectors of data y, and groups (strata) g
+  y <- unlist(x)
+  g <- factor(rep(1:length(x), times=sapply(x, length)))
+  if (is.numeric(y)) {
+    # For numeric variables, perform a standard 2-sample t-test
+    p <- t.test(y ~ g)$p.value
+  } else {
+    # For categorical variables, perform a chi-squared test of independence
+    p <- chisq.test(table(y, g))$p.value
+  }
+  # Format the p-value, using an HTML entity for the less-than sign.
+  # The initial empty string places the output on the line below the variable label.
+  c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+```
+
+Next, we put this function in the table1 code and put a *p values* column in place of the *total* column.
+
+The result is a table with p values replacing the *total* column.
+
+```{r with p values}
+
+table1(~ Age + Sex + BP + Cholesterol + 
+         FBS.over.120 | status, data= HD,
+         overall=F, extra.col=list(`P-value`=pvalue))
+
+
+```
+
+
+
+
+
+From this table, it is clear that *Age*, *Sex* are associated with p values less than 0.001. *BP* and *Cholesterol* are associated with p values less than 0.01 and 0.05, whereas *fasting blood sugar over 120* is associated with a p value of 0.924 (ns)
+
+Finally, we could change labels and add units of measurements to the table to give it a professional look, as presented in medical journals.
+
+```{r}
+label(HD$BP)     <- "Blood Pressure"
+label(HD$Cholesterol)  <- "Cholesterol"
+label(HD$FBS.over.120) <- "FBS > 120 mg/dl"
+
+units(HD$Age)      <- "years"
+units(HD$BP)      <- "mm Hg"
+units(HD$Cholesterol) <- "mg/dl"
+units(HD$FBS.over.120) <- "mg/dl"
+
+table1(~ Age + Sex + BP + Cholesterol + 
+         FBS.over.120 | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+
+
+
+```
+
+
+The table is complete
+
+Labels are understandable and the units of measurements were added to age, gender, blood pressure, cholesterol and blood sugar.
+
+
+### Graphical representation of the Risk Factor data
+
+### Age
+Let start with the *Age* variable. Age distribution in the table looks like this:
+
+```{r}
+table1(~ Age | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+```
+
+
+The median age for patients without heart disease equals 52 and the median age for patients with heart disease is 58 (black horizontal lines). The mean ages are 52.7 and 56.6 respectively with a standard deviation of 9.51 and 8.12. The white box contains the ages of patients without heart disease (25-75%) and the grey box (25-75%) all ages in patients with heart disease. 
+
+### Sex
+The gender variable looks in the table like this:
+```{r sex }
+table1(~ Sex | status, data= HD,
+      overall=F, extra.col=list(`P-value`=pvalue))
+
+```
+
+There are 87 females and 183 male patient in the dataset.
+Of the females 67 have no heart disease and around one third 20 patients have heart disease. This is in strong contrasts with the 183 male patients of whom 83 do not have heart disease and 100 patients have. In a graphical representation this contrast is immediately obvious. 
+
+Graphical representation:
+```{r}
+
+p1 <-ggplot(HD, aes(x = Heart.Disease, y = Age, fill = Heart.Disease)) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("#FFFFFF",
+                             "#CCCCCC")) +
+  labs(title = "Age")
+
+
+
+
+p2 <- ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Sex)) +
+  scale_fill_manual(values=c("grey",
+                             "black")) +
+  labs(title = "Gender") +
+  facet_wrap(~Sex)
+
+ggarrange(p1,p2,
+          labels = c("A", "B"),
+          ncol = 2, nrow = 1)
+
+```
+
+In this data set of 270 patients, there are 2 times more men than women included (183 versus 87). Of the 87 women around one third (20) has heart disease. Of the 183 men in this study more than 50 percent have heart disease (100/183).
+
+### Other risk factors
+The other risk factors are : blood pressure measurements, blood cholesterol tests and blood sugar tests. Let us now focus on these 3 risk factors. In the table these variables look like this:
+
+
+```{r other risk factors}
+table1(~ BP + Cholesterol + 
+         FBS.over.120 | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+
+```
+
+
+As one can see from the table, between patient with and without heart disease, there was no significant difference in number of patients with blood sugar levels over 120 mg/dl or not. It even looks like there were less patients with high levels in the heart disease group than in the group without heart disease. 
+
+
+How do these variables look in a graphical representation ?
+
+```{r diabetics}
+
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = FBS.over.120)) +
+  scale_fill_manual(values=c("grey",
+                             "black")) +
+  facet_wrap(~FBS.over.120)
+```
+
+There were 23 patients with a fasting blood sugar over 120 mg/dl in the group without heart disease(n=150) and 17 patients in the group with heart disease (n=120). Therefore, there were less patients with high sugar levels in the heart disease group than in the group without heart disease (14.2% vs 15.3%). 
+
+Next, we look at the risk factors *blood pressure* and *blood cholesterol levels*. The graphs are presented as boxplots next to each other.
+
+```{r}
+presHD <- HD %>%
+  filter(Heart.Disease == "Presence") 
+noHD <- HD %>%
+  filter(Heart.Disease == "Absence") 
+
+par(mfrow=c(1,2))
+boxplot(noHD$BP,presHD$BP, main = "Blood Pressure", 
+        ylab = "systolic BP")
+
+boxplot(noHD$Cholesterol, presHD$Cholesterol, main = "Cholesterol", 
+        ylab = "blood sample mg/dl")
+
+par(mfrow=c(1,1))
+
+```
+
+It is obvious, from the boxplots that the median *BP* and median *Cholesterol* do not differ very much in patients without and with heart disease in this study. The differences between *Age* in patients with and without heart disease are much more outspoken. In addition, the differences in male *Sex*, was observed in the presence or absence of heart disease were also large.
+
+In summary, in this cross-sectional study, risk factors *Age* and  male *Sex* were much more often observed in heart disease, than in the absence of heart disease *Blood pressure* and *Cholesterol levels* showed statistically significant differences but were less outspoken and  *FBG.over.120* as a surrogate for the presence of diabetes did not reach a sifnificant level.
+
+## Analysis of Chest Pain and EKG abnormalities
+The variables *Chest.pain.type* and *EKG.results* are discussed in this section. First, we create a table with these variables.To do this the class of  *Chest.pain.type* and *EKG.results* must be changed from **integer** to **factor**.
+
+```{r integer to factor}
+class(HD$Chest.pain.type) 
+# retuns integer
+table(HD$Chest.pain.type)
+# returns the integers 1,2,3,4 change to factor variables
+HD$Chest.pain.type <- factor(HD$Chest.pain.type,
+                 levels=c(1,2,3,4))
+                 
+class(HD$EKG.results) 
+# returns integer
+table(HD$EKG.results)
+HD$EKG.results <- factor(HD$EKG.results,
+                             levels=c(0,1,2))
+```
+
+Next, insert the table1 code: 
+
+
+```{r}
+table1(~ Chest.pain.type + EKG.results | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+
+```
+
+For *EKG.results* a warning message appears: Chi-squared approximation may be incorrect. This is correct because the numbers of EKG.results = 1 are to small to generate a reliable Chi-squared approximation. Therefore, we have to omit the EKG.results in the analysis.
+
+The graphs of these findings look like this:
+
+```{r}
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Chest.pain.type)) +
+  scale_fill_manual(values=c("#FFFFFF",
+                             "#CCCCCC",
+                             "#999999",
+                             "#000000")) +
+  facet_wrap(~Chest.pain.type)
+```
+
+Considering the chest pain scale going from 1 to 4, it comes as no surprise that severe typical chest pain is observed in a majority of patients with heart disease and chest pain type 1  and  are more often observed in patients without the disease than in patients with heart disease.
+
+Just for completeness, the EKG.results are also shown.
+
+```{r}
+
+
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = EKG.results)) +
+  
+  scale_fill_manual(values=c("#CCCCCC",
+                             "#999999",
+                             "#000000")) +
+  facet_wrap(~EKG.results)
+
+```
+
+The number of the EKG.results = 1 equals 2. These results are too small to generate a reliable Chi-squared approximation. As a solution, one could omit *EKG.results = 1*,  and reduce the factor(HD$EKG.results) to 2 levels *0 =normal* and *1 = abnormal*. Of course, this should first be discussed with the authors or stakeholders.
+
+## Analysis of Exercise Tests
+There are 4 variables related to exercise:
+
+* Exercise angina
+The *Exercise.angina* variable is an integer and must be changed to a factor variable:
+```{r}
+HD$Exercise.angina <- factor(HD$Exercise.angina, 
+                    levels=c(0,1),
+                    labels=c("no angina",
+                             "angina"))
+
+```
+
+
+* ST segment depression 
+*ST.depression* is a numeric variable. A readable label and measurement units are obtained by the following code:
+
+```{r}
+label(HD$ST.depression)     <- "ST depression"
+units(HD$ST.depression)      <- "mm"
+```
+
+* Slope of the ST segment 
+The *Slope.of.ST* variable is an integer and must be changed to a factor variable:
+```{r}
+HD$Slope.of.ST <- factor(HD$Slope.of.ST, 
+                             levels=c(1,2,3),
+                             labels=c("upsloping",
+                                      "downsloping",
+                                      "horizontal"))
+```
+Unfortunately, one does not know if these labels are correct.
+One has to consult the authors to find out where 1, 2 and 3 stand for.
+It might be possible that 1 stands for up sloping, 2 for horizontal and 3 for down sloping.
+We simple do not know from the dataset.
+
+* Thallium test                       
+ The *Thallium* variable is an integer and must be changed to a factor variable:
+```{r}
+HD$Thallium <- factor(HD$Thallium, 
+                         levels=c(3,6,7),
+                         labels=c("negative",
+                                  "inconclusive",
+                                  "positive"))
+
+```
+Again, one does not know if these labels are correct.
+One has to consult the authors to find out where 3, 6 and 7 stand for. So the label description might be incorrect.
+
+In table format, these results look like this:
+
+
+```{r}
+table1(~ Exercise.angina + ST.depression + Slope.of.ST +Thallium | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+```
+From this table, one thing is clear: The presence of angina during exercise, the level of ST depression, a down sloping ST segment or horizontal ST segment and an abnormal thallium test are show significant differences in patients with and without heart disease.
+
+
+Graphical representation of these findings:
+```{r}
+ggplot(HD, aes(x = Heart.Disease, y = ST.depression, fill = Heart.Disease)) +
+  geom_boxplot() +
+  scale_fill_manual(values=c("#FFFFFF",
+                             "#CCCCCC")) +
+  labs(title = "Max ST depression on the ECG during exercise")
+
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Exercise.angina)) +
+  scale_fill_manual(values=c("grey",
+                             "black")) +
+  facet_wrap(~Exercise.angina)
+##########
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Slope.of.ST)) +
+  scale_fill_manual(values=c("#CCCCCC",
+                             "#666666",
+                             "black")) +
+  facet_wrap(~Slope.of.ST)
+##############
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Thallium)) +
+  scale_fill_manual(values=c("#CCCCCC",
+                             "#666666",
+                             "black")) +
+  facet_wrap(~Thallium)
+```
+
+ST depression during exercise strongly predicts the presence of heart disease. In addition, *angina during exercise*,  a *down sloping* ST segment or *horizontal* ST segment and an abnormal *thallium* test, all show significant differences in patients with and without heart disease.
+
+
+## Analysis of coronary angiography
+
+The variable *Number.of.vessels.fluro* shows the results of the coronary vessels involved in the coronary disease of the patient. A score of 0 means normal coronary vessels, a score of 1 means there is one of the coronary vessels with a stenosis or obstruction. A score of 2 means 2 vessels are involved and a score of 3 means all vessels are involved in the process of coronary artery disease.
+
+As a logical consequence, patients with normal coronary vessels do not have coronary artery disease but could have other forms of heart disease e.g. valvular disease, atrial or ventricular myocardial disease or cardiac arrhythmias. However, patients with 2 or 3 vessel disease all have coronary artery disease and would have heart disease because coronary disease is a subset under the total heart disease umbrella.
+
+Now, let us look at the table *Number.of.vessels.fluro*:
+
+```{r}
+table(HD$Number.of.vessels.fluro)
+# change integer class to factor class
+HD$Number.of.vessels.fluro <- factor(HD$Number.of.vessels.fluro, 
+                      levels=c(0,1,2,3),
+                      labels=c("normal",
+                               "1-vessel",
+                               "2-vessel",
+                               "3-vessel"))
+
+```
+
+Fluorscopy
+
+```{r}
+table1(~ Number.of.vessels.fluro | status, data= HD,
+       overall=F, extra.col=list(`P-value`=pvalue))
+
+```
+
+
+There are 160 patients with **normal vessels** and 110 have **1-3 vessel** abnormalities.
+
+The 110 with 1-3 vessel disease all have coronary artery disease and thus all have heart disease, because heart disease is the umbrella overlapping all variants of heart disease. From the table, we get a different impression, since in the 3 groups with 1, 2, or 3 vessel disease there are patients without heart disease. This is incomprehensible and we must ask the authors for an explanation.
+
+Graphical representation looks like this:
+
+```{r}
+ggplot(data = HD) + 
+  geom_bar(mapping = aes(x = Heart.Disease, fill = Number.of.vessels.fluro)) +
+  scale_fill_manual(values=c("#FFFFFF",
+                             "#CCCCCC",
+                             "#666666",
+                             "black")) +
+  facet_wrap(~Number.of.vessels.fluro)
+
+```
+
+The graph illustrates this problem. How is it possible that patients with documented coronary artery disease have no heart disease, when coronary artery disease is a subset of patients with heart disease.
+
+
+## Conclusions
+
+* This is a cross-sectional study, where 13 variables are tested against an outcome variable Heart.Disease. In a total of 270 patients, there were 150 patients without heart disease and 120 patients with heart disease.
+
+* **Age** and **Gender** show significant differences in patients with and without heart disease. **Blood pressure**, **Cholesterol** also significant differences in patients with and without heart disease. **FBS.over.120** as a surrogate for diabetes did not reach the level of significance.
+
+* Severe typical chest pain **type 4** was observed in the majority of patients with heart disease and in contrast chest pain pain **type 1**  was more often observed in patients without the disease.
+
+* There was a problem with the interpretation of the **EKG.results**, to be discussed with the authors.
+
+* **Maximal heart rate during exercise**, **angina during exercise**, **ST depression**, the **down sloping or horizontal ST slope**  and the **abnormal thallium** test also significant differences in patients with and without heart disease.
+
+* The coronary vessel analysis was not problematic, but the results were **incomprehensible**. There must be a definition problem as we accept that patients with coronary vessel disease have coronary artery disease and thus have hearty disease, than it is **impossible** that they have no heart disease. We must ask the authors what their definition was of heart disease.
+
+## Logistic Regression analysis
+In this analysis the question is answered: "Can we predict the **outcome** heart disease or no heart disease present based on the variables studied in this population?"
+
+
+### First, start with the original dataset:
+Select the variables of interest.
+
+```{r}
+HD <- read.csv("Heart_Disease_Prediction.csv")
+colnames(HD)
+
+newHD <- HD %>%
+  select(Age, Sex, Chest.pain.type, EKG.results,
+         Exercise.angina, ST.depression,
+         Slope.of.ST, Thallium,Heart.Disease)
+
+
+newHD$Sex <- factor(newHD$Sex, 
+                 levels=c(0,1),
+                 labels=c("female",
+                          "male"))
+
+newHD$Chest.pain.type <- factor(newHD$Chest.pain.type,
+                             levels=c(1,2,3,4))
+
+
+status <- ifelse(HD$Heart.Disease == "Absence", 0,1)
+
+newHD$status = status
+
+newHD$status <- factor(newHD$status, 
+                    levels=c(0,1),
+                    labels=c("no Heart Disease",
+                             "Heart Disease"))
+newHD$Exercise.angina <- factor(newHD$Exercise.angina, 
+                                levels=c(0,1),
+                                labels=c("no angina",
+                                         "angina"))
+newHD$Slope.of.ST <- factor(newHD$Slope.of.ST, 
+                            levels=c(1,2,3),
+                            labels=c("upsloping",
+                                     "downsloping",
+                                     "horizontal"))
+
+newHD$Chest.pain.type <- factor(newHD$Chest.pain.type,
+                                levels=c(1,2,3,4))
+
+table(newHD$EKG.results)
+newHD$EKG.results <- factor(newHD$EKG.results,
+                            levels=c(0,1,2))
+
+# skip the 2 results of factor 1 
+ks <- subset(newHD,EKG.results == 1)
+ks  # gives the record numbers of these 2 patients
+newHD$EKG.results[74] <- 0
+newHD$EKG.results[111] <- 2
+
+newHD$EKG.results <- ifelse(newHD$EKG.results == 0, "normal","not normal")
+
+newHD$EKG.results <- factor(newHD$EKG.results)
+```
+
+### Next define the model:
+Logistic regression is a statistical analysis method to predict a binary outcome, such as yes or no, based on prior observations of a data set. In this study, the variable **Heart.Disease** (Absence or Presence) was used to predict a binary outcome.
+
+* status was tested against :
+
+* Age
+
+* Gender
+
+* Chest.pain.type
+
+* EKG.results
+
+* Exercise angina
+
+* ST.depression
+
+* Slope.of.ST
+
+* Thallium
+
+```{r}
+mylogit <- glm(status ~ Age + Sex + Chest.pain.type + EKG.results +
+                 Exercise.angina + ST.depression +
+                 Slope.of.ST + Thallium, data = newHD, 
+               family = "binomial")
+summary(mylogit)
+confint.default(mylogit)
+exp(coef(mylogit))## odds ratios and 95% CI
+exp(cbind(OR = coef(mylogit), confint(mylogit)))
+```
+
+The glm model was used analyzing the relationship between one or more existing independent variables against **Heart.Disease**, were status is either 0 or 1 (0 = HD not present and 1 = HD present). 
+
+*Gender* was a strong predictor of the presence of heart disease. In addition, **Chest.pain.type4**, **ST depression**, and a **positive thallium test**  were all **strong predictors** of heart disease in this model. 
+
+The fact that all patients with **documented coronary abnormalities** (1 vessel, 2 vessel or 3 vessel disease) were strong predictors  does not come as a surprise, since documented coronary artery disease is the same as presence of heart disease as we earlier mentioned.
+
+
+## Example of Age and Chest-pain type against outcome 
+
+
+Logistic regression analysis for **men**, where Age and Chest pain type (1:4) as independent variables were tested against the dependant variable outcome(HD present or HD not present);
+
+```{r}
+newdata1 <- with(newHD, data.frame(Age = mean(Age),
+                                    Sex = "male",
+                                    EKG.results = "normal",
+                                    Exercise.angina ="angina",
+                                    ST.depression = mean(ST.depression),
+                                    Slope.of.ST= "upsloping",
+                                    Thallium = mean(Thallium),
+                                    Chest.pain.type = factor(1:4)))
+                                    
+                                    
+# mylogit is the glm result of the original data
+newdata1$rankP <- predict(mylogit, newdata = newdata1, type = "response")
+
+
+newdata2 <- with(newHD, data.frame(Age = rep(seq(from=30, to = 81, by =1),8),
+                                   Sex = "male",
+                                   EKG.results = "normal",
+                                   Exercise.angina ="angina",
+                                   ST.depression = mean(ST.depression),
+                                   Slope.of.ST= "upsloping",
+                                   Thallium = mean(Thallium),
+                                   Chest.pain.type = factor(rep(1:4, each = 104))))
+
+
+
+newdata3 <- cbind(newdata2, predict(mylogit, newdata = newdata2,
+                                    type = "link", se = TRUE))
+
+newdata3 <- within(newdata3, {
+  PredictedProb <- plogis(fit)
+  LL <- plogis(fit - (1.96 * se.fit))
+  UL <- plogis(fit + (1.96 * se.fit))
+})
+
+ggplot(newdata3, aes(x = Age, y = PredictedProb)) + 
+  geom_ribbon(aes(ymin = LL, ymax = UL, fill = Chest.pain.type), alpha = 0.2) +
+  geom_line(aes(colour = Chest.pain.type),size = 1)
+
+```
+
+From this illustration, typical chest pain or type-4 is a strong predictor of the presence of heart disease at any age. We can do the same for other strong predictors, like ST depression and an abnormal Thallium test. We can **not** do this for documented coronary disease (one-vessel, two-vessel or three-vessel) because the presence of coronary artery disease implies the presence of heart disease by definition, as mentioned before. This item has to be discussed with the authors of the data set.
+
+ 
+The same was done for the **female** population :
+```{r}
+# female
+newdata1 <- with(newHD, data.frame(Age = mean(Age),
+                                   Sex = "female",
+                                   EKG.results = "normal",
+                                   Exercise.angina ="angina",
+                                   ST.depression = mean(ST.depression),
+                                   Slope.of.ST= "upsloping",
+                                   Thallium = mean(Thallium),
+                                   Chest.pain.type = factor(1:4)))
+
+
+
+# mylogit is the glm result of the original data
+newdata1$rankP <- predict(mylogit, newdata = newdata1, type = "response")
+
+
+newdata2 <- with(newHD, data.frame(Age = rep(seq(from=30, to = 81, by =1),8),
+                                   Sex = "female",
+                                   EKG.results = "normal",
+                                   Exercise.angina ="angina",
+                                   ST.depression = mean(ST.depression),
+                                   Slope.of.ST= "upsloping",
+                                   Thallium = mean(Thallium),
+                                   Chest.pain.type = factor(rep(1:4, each = 104))))
+
+newdata3 <- cbind(newdata2, predict(mylogit, newdata = newdata2,
+                                    type = "link", se = TRUE))
+
+newdata3 <- within(newdata3, {
+  PredictedProb <- plogis(fit)
+  LL <- plogis(fit - (1.96 * se.fit))
+  UL <- plogis(fit + (1.96 * se.fit))
+})
+
+ggplot(newdata3, aes(x = Age, y = PredictedProb)) + 
+  geom_ribbon(aes(ymin = LL, ymax = UL, fill = Chest.pain.type), alpha = 0.2) +
+  geom_line(aes(colour = Chest.pain.type),size = 1)
+
+```
+
+
+From this illustration, it is obvious that typical chest pain or chest pain type-4, is at any age is the best predictor of heart disease in women, which underscores the importance of the clinical history of a patient. 
+
+
+
+
+
+
+
